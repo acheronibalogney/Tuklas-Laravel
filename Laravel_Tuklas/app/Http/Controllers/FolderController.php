@@ -1,0 +1,1 @@
+<?php namespace App\Http\Controllers; use Illuminate\Http\Request; class FolderController extends Controller { public function index(Request $request) { if (!$request->user()) return response()->json(['error' => 'Authentication required.'], 401); return response()->json($request->user()->folders()->latest()->get()); } }

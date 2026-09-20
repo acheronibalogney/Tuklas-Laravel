@@ -1,0 +1,1 @@
+<?php namespace App\Models; use Illuminate\Database\Eloquent\Model; class Scan extends Model { protected $guarded = []; protected $casts = ['analysis' => 'array', 'analyzed_at' => 'datetime']; public function user() { return $this->belongsTo(User::class); } }

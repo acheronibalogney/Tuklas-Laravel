@@ -1,0 +1,25 @@
+# GalingPH - Youth Career Intelligence Platform
+# https://galingph.com
+
+User-agent: *
+Allow: /
+
+# Sitemap location
+Sitemap: https://galingph.com/sitemap.xml
+
+# Crawl-delay for well-behaved bots
+Crawl-delay: 1
+
+# Block admin and internal routes
+Disallow: /admin
+Disallow: /api/
+
+# Allow all public pages
+Allow: /
+Allow: /auth
+Allow: /onboarding
+Allow: /mobile
+Allow: /team
+Allow: /privacy
+Allow: /terms
+Allow: /404

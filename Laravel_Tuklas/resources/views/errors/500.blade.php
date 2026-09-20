@@ -1,0 +1,5 @@
+@php($code = 500)
+@php($eyebrow = 'System notice')
+@php($title = 'Something needs attention.')
+@php($message = 'Tuklas could not complete that request right now. Return home and try again in a moment.')
+@include('errors.layout')

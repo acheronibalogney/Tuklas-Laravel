@@ -1,0 +1,28 @@
+{
+  "name": "GalingPH — Youth Career Intelligence",
+  "short_name": "GalingPH",
+  "description": "AI-Powered Career Intelligence Platform for Filipino Youth",
+  "icons": [
+    {
+      "src": "/logo-color.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/galingph-logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ],
+  "theme_color": "#00F5AA",
+  "background_color": "#E9EFEB",
+  "display": "standalone",
+  "start_url": "/",
+  "scope": "/"
+}

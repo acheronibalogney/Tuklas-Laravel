@@ -1,0 +1,4 @@
+<?php
+namespace App\Http\Controllers;
+use App\Models\Document; use Illuminate\Http\Request; use Illuminate\Support\Str;
+class DocumentController extends Controller { public function handle(Request $request) { $user=$request->user(); if(!$user)return response()->json(['error'=>'Authentication required.'],401); if($request->isMethod('get'))return response()->json($user->documents()->latest()->get()); $request->validate(['files'=>'required|array']); $saved=[]; foreach($request->input('files') as $file){$saved[]=Document::create(['user_id'=>$user->id,'name'=>(string)($file['name']??'Unnamed file'),'mime_type'=>(string)($file['type']??'application/octet-stream'),'size'=>(int)($file['size']??0),'category'=>(string)($file['category']??'scan'),'status'=>'uploaded','path'=>null]);} return response()->json(['ok'=>true,'documents'=>$saved]); } }

@@ -1,0 +1,5 @@
+@php($code = 404)
+@php($eyebrow = 'Route not found')
+@php($title = 'This path does not exist.')
+@php($message = 'The page may have moved, or the address may be incomplete. Let’s get you back to a useful next step.')
+@include('errors.layout')

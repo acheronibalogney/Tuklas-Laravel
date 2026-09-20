@@ -1,0 +1,1 @@
+<?php return ['google' => ['client_id' => env('VITE_GOOGLE_CLIENT_ID'), 'client_secret' => env('GOOGLE_CLIENT_SECRET'), 'redirect' => env('GOOGLE_REDIRECT_URI')], 'gemini' => ['key' => env('GOOGLE_AI_API_KEY'), 'models' => env('GEMINI_MODELS')], 'resend' => ['key' => env('RESEND_API_KEY'), 'from' => env('AUTH_EMAIL_FROM')]];
