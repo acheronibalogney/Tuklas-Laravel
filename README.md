@@ -18,7 +18,12 @@ scan credentials with AI assistance.
 - PHP 8.5+
 - Composer
 - Node.js 18+
-- PostgreSQL (or Docker)
+- PostgreSQL 14+ (or Docker Desktop)
+- Git
+
+The commands below work on Windows, macOS, and Linux. Use PowerShell or
+Command Prompt on Windows, and a terminal such as Terminal, iTerm2, or a
+Linux shell on macOS/Linux.
 
 ## Local setup
 
@@ -31,14 +36,33 @@ scan credentials with AI assistance.
 
 2. Create and configure the environment file:
 
-   ```bash
-   copy .env.example .env       # Windows
-   # cp .env.example .env       # macOS/Linux
+   **Windows (PowerShell):**
+
+   ```powershell
+   Copy-Item .env.example .env
    php artisan key:generate
    ```
 
-   Set the PostgreSQL connection values in `.env`. Keep secrets such as API
-   keys out of source control.
+   **Windows (Command Prompt):**
+
+   ```bash
+   copy .env.example .env
+   php artisan key:generate
+   ```
+
+   **macOS or Linux:**
+
+   ```bash
+   cp .env.example .env
+   php artisan key:generate
+   ```
+
+   Set the PostgreSQL connection values in `.env`. Keep `APP_KEY`, database
+   passwords, OAuth credentials, and API keys out of source control.
+
+   For a local PostgreSQL installation, set `DB_CONNECTION=pgsql` and the
+   `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, and `DB_PASSWORD`
+   values. The default local port is `5432`.
 
 ### API and OAuth configuration
 
@@ -83,14 +107,36 @@ social sign-in cannot complete OTP verification without working email settings.
 
 ### Docker
 
-For a local Laravel and PostgreSQL environment:
+Docker Desktop is supported on Windows and macOS. Docker Engine is supported
+on Linux. From the project directory, create `.env` and start the Laravel and
+PostgreSQL containers:
+
+**Windows (PowerShell):**
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build
+```
+
+**Windows (Command Prompt):**
 
 ```bash
-copy .env.example .env       # Windows
+copy .env.example .env
+docker compose up --build
+```
+
+**macOS or Linux:**
+
+```bash
+cp .env.example .env
 docker compose up --build
 ```
 
 The application is available at `http://localhost:8000`.
+
+To stop the containers, press `Ctrl+C` or run `docker compose down` in a
+second terminal. If you use a locally installed PostgreSQL server instead of
+Docker, run only the Laravel and Vite commands from the local setup section.
 
 ## Useful commands
 
