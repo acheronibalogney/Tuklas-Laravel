@@ -9,8 +9,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 
 class AuthController extends Controller
@@ -19,10 +19,10 @@ class AuthController extends Controller
 
     public function handle(Request $request)
     {
-        if ($request->isMethod('get')) return Auth::check() ? response()->json($this->publicUser($request->user())) : $this->unauthorized();
+        if ($request->isMethod('get')) return response()->json(Auth::check() ? $this->publicUser($request->user()) : null);
         if ($request->isMethod('delete')) { Auth::logout(); $request->session()->invalidate(); $request->session()->regenerateToken(); return response()->json(['ok' => true])->withoutCookie('tuklas_trusted_device'); }
 
-        $request->validate(['action' => ['required', Rule::in(['login', 'verify-otp', 'signup', 'social', 'update-password', 'forgot-password'])]]);
+        $request->validate(['action' => ['required', Rule::in(['login', 'verify-otp', 'resend-otp', 'signup', 'social', 'update-password', 'forgot-password'])]]);
         $action = $request->string('action')->toString();
 
         if ($action === 'login') {
@@ -43,7 +43,19 @@ class AuthController extends Controller
             if ($challenge->attempts >= 5) return response()->json(['error' => 'Too many attempts. Please sign in again.'], 429);
             if (!Hash::check($request->string('code')->toString(), $challenge->code_hash)) { \Illuminate\Support\Facades\DB::table('otp_challenges')->where('id', $challenge->id)->increment('attempts'); return response()->json(['error' => 'That verification code is incorrect.'], 401); }
             $user = User::find($challenge->user_id); \Illuminate\Support\Facades\DB::table('otp_challenges')->where('id', $challenge->id)->delete();
-            return $this->loginResponse($request, $user, $request->boolean('trustDevice', true));
+            return $this->loginResponse($request, $user, $request->boolean('trustDevice', true), 200, $challenge->provider ?: 'password');
+        }
+
+        if ($action === 'resend-otp') {
+            $request->validate(['challengeToken' => 'required|string']);
+            $challenge = \Illuminate\Support\Facades\DB::table('otp_challenges')->where('token_hash', hash('sha256', $request->string('challengeToken')->toString()))->first();
+            if (!$challenge || now()->greaterThan($challenge->expires_at)) return response()->json(['error' => 'That verification request has expired. Please sign in again.'], 401);
+            if ($challenge->created_at && now()->diffInSeconds($challenge->created_at) < 30) return response()->json(['error' => 'Please wait a few seconds before requesting another code.'], 429);
+            $user = User::find($challenge->user_id);
+            if (!$user) return response()->json(['error' => 'Unable to find the account for this verification request.'], 404);
+            $nextChallenge = $this->createOtpChallenge($user, $challenge->provider ?: 'password');
+            try { $this->sendOtp($user->email, $nextChallenge['code']); } catch (\Throwable $error) { \Illuminate\Support\Facades\DB::table('otp_challenges')->where('token_hash', hash('sha256', $nextChallenge['token']))->delete(); return response()->json(['error' => $error->getMessage() ?: 'Unable to send the verification code.'], 503); }
+            return response()->json(['requiresOtp' => true, 'challengeToken' => $nextChallenge['token'], 'maskedEmail' => $this->maskEmail($user->email)]);
         }
 
         if ($action === 'signup') {
@@ -54,7 +66,7 @@ class AuthController extends Controller
         }
 
         if ($action === 'social') {
-            $request->validate(['email' => 'required|email', 'name' => 'nullable|string|max:255', 'provider' => 'nullable|string|max:30']);
+            $request->validate(['email' => 'required|email:rfc,dns', 'name' => 'nullable|string|max:255', 'provider' => ['required', Rule::in(['Google', 'Facebook', 'google', 'facebook'])]]);
             $provider = strtolower($request->string('provider', 'social')->toString());
             $email = strtolower($request->string('email')->toString());
             $user = User::where('email', $email)->first();
@@ -62,14 +74,16 @@ class AuthController extends Controller
                 $user = User::create(['name' => $request->string('name', $request->string('email'))->toString(), 'email' => $email, 'password' => Str::random(40), 'profile' => ['picture' => $request->string('picture')->toString(), 'authProvider' => $provider, 'needsPasswordSetup' => true], 'notifications' => [], 'settings' => []]);
             }
             $profile = $user->profile ?: [];
-            // Older social accounts may not have the setup flag yet. Only
-            // mark accounts that are already identified as social accounts;
-            // do not interrupt normal password accounts sharing the email.
-            if ($request->filled('provider') && array_key_exists('authProvider', $profile) && !array_key_exists('needsPasswordSetup', $profile)) {
-                $profile['needsPasswordSetup'] = true;
-                $user->forceFill(['profile' => $profile])->save();
-            }
-            return $this->loginResponse($request, $user, true, 200, $provider);
+            $profile['authProvider'] = $provider;
+            $profile['needsPasswordSetup'] = true;
+            if ($request->filled('picture')) $profile['picture'] = $request->string('picture')->toString();
+            $user->forceFill([
+                'name' => $request->string('name')->trim()->toString() ?: $user->name,
+                'profile' => $profile,
+            ])->save();
+            $challenge = $this->createOtpChallenge($user, $provider);
+            try { $this->sendOtp($email, $challenge['code']); } catch (\Throwable $error) { \Illuminate\Support\Facades\DB::table('otp_challenges')->where('token_hash', hash('sha256', $challenge['token']))->delete(); return response()->json(['error' => $error->getMessage() ?: 'Unable to send the verification code.'], 503); }
+            return response()->json(['requiresOtp' => true, 'challengeToken' => $challenge['token'], 'maskedEmail' => $this->maskEmail($email), 'provider' => $provider]);
         }
 
         if ($action === 'update-password') {
@@ -93,6 +107,7 @@ class AuthController extends Controller
 
     private function loginResponse(Request $request, User $user, bool $trustDevice, int $status = 200, string $provider = 'password')
     {
+        $user->touch();
         Auth::login($user); $request->session()->regenerate();
         LoginLog::create(['user_id' => $user->id, 'provider' => $provider, 'ip_address' => $request->ip(), 'user_agent' => $request->userAgent(), 'logged_in_at' => now()]);
         $response = response()->json($this->publicUser($user), $status);
@@ -103,20 +118,21 @@ class AuthController extends Controller
     private function trustedDeviceIsValid(Request $request, string $email): bool { return hash_equals($this->trustedToken($email), (string) $request->cookie('tuklas_trusted_device', '')); }
     private function trustedToken(string $email): string { return hash_hmac('sha256', strtolower($email), (string) config('app.key')); }
 
-    private function createOtpChallenge(User $user): array
+    private function createOtpChallenge(User $user, string $provider = 'password'): array
     {
         $token = Str::random(64); $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
         \Illuminate\Support\Facades\DB::table('otp_challenges')->where('user_id', $user->id)->delete();
-        \Illuminate\Support\Facades\DB::table('otp_challenges')->insert(['user_id' => $user->id, 'token_hash' => hash('sha256', $token), 'code_hash' => Hash::make($code), 'expires_at' => now()->addMinutes(config('auth.otp.expires', 5)), 'created_at' => now(), 'updated_at' => now()]);
+        \Illuminate\Support\Facades\DB::table('otp_challenges')->insert(['user_id' => $user->id, 'provider' => $provider, 'token_hash' => hash('sha256', $token), 'code_hash' => Hash::make($code), 'expires_at' => now()->addMinutes(config('auth.otp.expires', 5)), 'created_at' => now(), 'updated_at' => now()]);
         return compact('token', 'code');
     }
 
     private function sendOtp(string $email, string $code): void
     {
-        $key = trim((string) config('services.resend.key')); $from = trim((string) config('services.resend.from'));
-        if (!$key || !$from) throw new \RuntimeException('OTP is enabled, but RESEND_API_KEY or AUTH_EMAIL_FROM is missing.');
-        $response = Http::withToken($key)->post('https://api.resend.com/emails', ['from' => $from, 'to' => [$email], 'subject' => 'Your Tuklas verification code', 'html' => '<p>Your Tuklas verification code is <strong style="font-size:28px;letter-spacing:6px">'.$code.'</strong>.</p><p>This code expires in 5 minutes.</p>']);
-        if ($response->failed()) throw new \RuntimeException('Unable to send the verification email.');
+        $from = trim((string) config('mail.from.address'));
+        if (!$from) throw new \RuntimeException('OTP is enabled, but MAIL_FROM_ADDRESS is missing.');
+        Mail::raw("Your Tuklas verification code is {$code}.\n\nThis code expires in 5 minutes.", function ($message) use ($email): void {
+            $message->to($email)->subject('Your Tuklas verification code');
+        });
     }
 
     private function maskEmail(string $email): string { [$name, $domain] = array_pad(explode('@', $email, 2), 2, ''); return substr($name, 0, 2).str_repeat('*', max(1, strlen($name) - 2)).'@'.$domain; }

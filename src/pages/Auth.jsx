@@ -127,7 +127,7 @@ function DatePicker({ value, onChange }) {
 
 export default function Auth() {
   const navigate = useNavigate();
-  const { login, verifyLoginOtp, signup, user, loginWithSocial, logout } = useUser();
+  const { login, verifyLoginOtp, resendLoginOtp, signup, user, loginWithSocial, logout } = useUser();
   const [mode, setMode] = useState('signin');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -161,6 +161,7 @@ export default function Auth() {
   const fadeTimer = useRef(null);
   const [socialProvider, setSocialProvider] = useState(null);
   const [socialOptions, setSocialOptions] = useState({ google: [], facebook: [] });
+  const socialCallbackHandledRef = useRef(false);
   const [barangays, setBarangays] = useState([]);
   useEffect(() => {
     let active = true;
@@ -173,7 +174,11 @@ export default function Auth() {
   const handleSocialAccountChoice = async (account) => {
     setLoginError('');
     const result = await loginWithSocial(account);
-    if (result.success) {
+    if (result.requiresOtp) {
+      setOtpChallenge(result);
+      setOtpCode('');
+      setSocialProvider(null);
+    } else if (result.success) {
       navigate('/app');
     } else {
       setLoginError(result.error || 'Social login failed.');
@@ -306,9 +311,22 @@ export default function Auth() {
     const result = await verifyLoginOtp(otpChallenge.challengeToken, otpCode, trustDevice);
     setOtpLoading(false);
     if (result.success) {
-      navigate('/app');
+      navigate(result.needsPasswordSetup ? '/onboarding' : '/app');
     } else {
       setLoginError(result.error || 'Verification failed.');
+    }
+  };
+
+  const handleResendOtp = async () => {
+    setOtpLoading(true);
+    setLoginError('');
+    const result = await resendLoginOtp(otpChallenge.challengeToken);
+    setOtpLoading(false);
+    if (result.success) {
+      setOtpChallenge(result.challenge);
+      setOtpCode('');
+    } else {
+      setLoginError(result.error || 'Unable to resend the verification code.');
     }
   };
 
@@ -328,7 +346,7 @@ export default function Auth() {
         return;
       }
       const nonce = `${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
-      const googleUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=id_token&scope=${encodeURIComponent('openid email profile')}&prompt=select_account&nonce=${encodeURIComponent(nonce)}&state=google`;
+      const googleUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=id_token&response_mode=fragment&scope=${encodeURIComponent('openid email profile')}&prompt=select_account&nonce=${encodeURIComponent(nonce)}&state=google`;
       window.location.href = googleUrl;
       return;
     }
@@ -355,7 +373,10 @@ export default function Auth() {
 
     const handleGoogleResponse = async (idToken) => {
       try {
-        const payload = JSON.parse(atob(idToken.split('.')[1]));
+        const encodedPayload = idToken.split('.')[1];
+        if (!encodedPayload) throw new Error('Google token payload is missing');
+        const payload = JSON.parse(atob(encodedPayload.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - encodedPayload.length % 4) % 4)));
+        if (!payload.email || payload.email_verified === false) throw new Error('Google did not return a verified email address');
         const account = {
           email: payload.email,
           name: payload.name || payload.email.split('@')[0],
@@ -363,13 +384,19 @@ export default function Auth() {
           provider: 'Google',
         };
         const result = await loginWithSocial(account);
-        if (result.success) {
+        if (result.requiresOtp) {
+          setOtpChallenge(result);
+          setOtpCode('');
+          window.history.replaceState({}, document.title, '/auth');
+        } else if (result.success) {
           window.history.replaceState({}, document.title, '/auth');
           navigate(result.needsPasswordSetup ? '/onboarding' : '/app');
+        } else {
+          setLoginError(result.error || 'Google login could not be completed.');
         }
       } catch (err) {
         console.error('Google response decode failed', err);
-        setLoginError('Google login failed. Please try again.');
+        setLoginError(err instanceof Error ? err.message : 'Google login failed. Please try again.');
       }
     };
 
@@ -387,9 +414,15 @@ export default function Auth() {
           provider: 'Facebook',
         };
         const result = await loginWithSocial(account);
-        if (result.success) {
+        if (result.requiresOtp) {
+          setOtpChallenge(result);
+          setOtpCode('');
+          window.history.replaceState({}, document.title, '/auth');
+        } else if (result.success) {
           window.history.replaceState({}, document.title, '/auth');
           navigate(result.needsPasswordSetup ? '/onboarding' : '/app');
+        } else {
+          setLoginError(result.error || 'Facebook login could not be completed.');
         }
       } catch (err) {
         console.error('Facebook response failed', err);
@@ -400,12 +433,19 @@ export default function Auth() {
     const hashParams = parseHash(window.location.hash);
     const searchParams = parseSearch(window.location.search);
     const state = hashParams.get('state') || searchParams.get('state');
+    const oauthError = hashParams.get('error') || searchParams.get('error');
+    const oauthErrorDescription = hashParams.get('error_description') || searchParams.get('error_description');
     const idToken = hashParams.get('id_token');
     const accessToken = hashParams.get('access_token') || searchParams.get('access_token');
 
-    if (state === 'google' && idToken) {
+    if (oauthError && !socialCallbackHandledRef.current) {
+      socialCallbackHandledRef.current = true;
+      setLoginError(oauthErrorDescription || `Social login was cancelled or rejected: ${oauthError}.`);
+    } else if (state === 'google' && idToken && !socialCallbackHandledRef.current) {
+      socialCallbackHandledRef.current = true;
       handleGoogleResponse(idToken);
-    } else if (state === 'facebook' && accessToken) {
+    } else if (state === 'facebook' && accessToken && !socialCallbackHandledRef.current) {
+      socialCallbackHandledRef.current = true;
       handleFacebookResponse(accessToken);
     }
   }, [loginWithSocial, navigate]);
@@ -1676,6 +1716,9 @@ export default function Auth() {
                       {otpLoading ? 'Verifying...' : 'Verify and continue'}
                     </button>
                     {loginError && <div className='auth-error-alert'>{loginError}</div>}
+                    <button type='button' className='link-button' style={{ display: 'block', margin: '12px auto 0' }} onClick={handleResendOtp} disabled={otpLoading}>
+                      Resend code
+                    </button>
                     <button type='button' className='link-button' style={{ display: 'block', margin: '16px auto 0' }} onClick={() => { setOtpChallenge(null); setOtpCode(''); setLoginError(''); }}>
                       Back to sign in
                     </button>

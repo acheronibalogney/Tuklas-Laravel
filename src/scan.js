@@ -477,6 +477,7 @@ export async function scanFiles({ files, goal, onFileProgress, mode = 'document-
   if (!files.length) {
     const response = await fetch('/api/scan', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ goal, files: [], mode }),
     });

@@ -198,7 +198,7 @@ export default function Onboarding() {
       setPasswordError('Use at least 8 characters and make sure both passwords match.');
       return;
     }
-    const response = await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update-password', newPassword: socialPassword, newPassword_confirmation: socialPasswordConfirmation }) });
+    const response = await fetch('/api/auth', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update-password', newPassword: socialPassword, newPassword_confirmation: socialPasswordConfirmation }) });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) { setPasswordError(result.error || 'Unable to create your password.'); return; }
     window.location.reload();

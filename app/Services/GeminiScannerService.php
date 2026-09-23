@@ -13,8 +13,8 @@ class GeminiScannerService
         if ($key === '') throw new RuntimeException('Google AI is not configured on the server.');
 
         $models = collect(explode(',', (string) config('services.gemini.models')))
-            ->map(fn ($model) => trim($model))->filter()->map(fn ($model) => str_starts_with($model, 'models/') ? $model : 'models/'.$model)->values();
-        if ($models->isEmpty()) $models = collect(['models/gemini-2.5-flash']);
+            ->map(fn ($model) => trim($model))->filter()->map(fn ($model) => str_starts_with($model, 'models/') ? $model : 'models/'.$model)->unique()->values();
+        if ($models->isEmpty()) throw new RuntimeException('No Gemini models are configured. Set GEMINI_MODELS in the server .env file.');
 
         $parts = [['text' => $this->prompt($goal, $files, $mode)]];
         foreach ($files as $file) {
@@ -45,7 +45,10 @@ class GeminiScannerService
     private function prompt(string $goal, array $files, string $mode): string
     {
         $fileList = collect($files)->map(fn ($file, $i) => ($i + 1).'. '.($file['name'] ?? 'document').' ('.($file['type'] ?? 'document').')')->implode("\n");
-        return "You are TuklasAI, a practical Philippine career and document intelligence assistant. Mode: {$mode}. Answer the user's goal using only supplied evidence when files exist. Do not invent qualifications. Recommend real TESDA programs and practical learning resources. Return ONLY valid JSON with exactly these keys: summary (string), skillsDetected (array of strings), careerMatches (array of {name,match}), jobRecommendations (array), skillGaps (array of strings), tesdaRecommendations (array of strings), learningRecommendations (array of objects with title,type,reason,evidence,searchTerms,directUrl,learningSite), nextActions (array of strings). Be honest when evidence is limited. User goal: ".($goal ?: 'Comprehensive resume and career scan')."\nFiles:\n{$fileList}";
+        $conversationInstruction = $mode === 'career-path'
+            ? "This is an ongoing conversation. Answer the user's latest message directly and naturally, using the previous conversation included in the user goal for context. Do not repeat the greeting or describe yourself unless asked. Give practical Philippine-specific guidance, explain uncertainty, and suggest clear next steps."
+            : "Analyze the supplied documents and answer the user's goal using only supplied evidence when files exist.";
+        return "You are TuklasAI, a practical Philippine career and document intelligence assistant. Mode: {$mode}. {$conversationInstruction} Do not invent qualifications. Recommend real TESDA programs and practical learning resources. Return ONLY valid JSON with exactly these keys: summary (string), skillsDetected (array of strings), careerMatches (array of {name,match}), jobRecommendations (array), skillGaps (array of strings), tesdaRecommendations (array of strings), learningRecommendations (array of objects with title,type,reason,evidence,searchTerms,directUrl,learningSite), nextActions (array of strings). Be concise and useful. User goal and conversation: ".($goal ?: 'Comprehensive resume and career scan')."\nFiles:\n{$fileList}";
     }
 
     private function parseJson(string $text): array

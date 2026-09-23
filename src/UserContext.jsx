@@ -6,6 +6,7 @@ async function saveUserRecord(email, updates) {
   if (!email) return;
   const response = await fetch('/api/users', {
     method: 'PUT',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, ...updates }),
   });
@@ -196,6 +197,7 @@ export function UserProvider({ children }) {
     try {
       const response = await fetch('/api/auth', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'login', email, password }),
       });
@@ -213,13 +215,30 @@ export function UserProvider({ children }) {
     try {
       const response = await fetch('/api/auth', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'verify-otp', challengeToken, code, trustDevice }),
       });
       const result = await response.json();
       if (!response.ok) return { success: false, error: result.error || 'Verification failed.' };
       setUser(result);
-      return { success: true };
+      return { success: true, needsPasswordSetup: result.needsPasswordSetup };
+    } catch {
+      return { success: false, error: 'Unable to connect to the database.' };
+    }
+  };
+
+  const resendLoginOtp = async (challengeToken) => {
+    try {
+      const response = await fetch('/api/auth', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'resend-otp', challengeToken }),
+      });
+      const result = await response.json();
+      if (!response.ok) return { success: false, error: result.error || 'Unable to resend the verification code.' };
+      return { success: true, challenge: result };
     } catch {
       return { success: false, error: 'Unable to connect to the database.' };
     }
@@ -232,11 +251,13 @@ export function UserProvider({ children }) {
     try {
       const response = await fetch('/api/auth', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'social', email: account.email, name: account.name, picture: account.picture, provider: account.provider }),
       });
       const result = await response.json();
       if (!response.ok) return { success: false, error: result.error || 'Social login failed.' };
+      if (result.requiresOtp) return result;
       setUser(result);
       return { success: true, needsPasswordSetup: result.needsPasswordSetup };
     } catch {
@@ -248,6 +269,7 @@ export function UserProvider({ children }) {
     try {
       const response = await fetch('/api/auth', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'signup',
@@ -494,7 +516,7 @@ export function UserProvider({ children }) {
 
   return (
     <UserContext.Provider value={{
-      user, authReady, login, verifyLoginOtp, loginWithGoogle, loginWithSocial, signup, logout,
+      user, authReady, login, verifyLoginOtp, resendLoginOtp, loginWithGoogle, loginWithSocial, signup, logout,
       notifications, markNotificationRead, clearAllNotifications, addNotification,
       analyzeResume, analyzeCertificate, analyzeFiles, syncScanAnalysis, analysisResult, saveDocuments,
       profileSettings, updateProfileSettings,

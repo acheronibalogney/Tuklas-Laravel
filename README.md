@@ -40,6 +40,30 @@ scan credentials with AI assistance.
    Set the PostgreSQL connection values in `.env`. Keep secrets such as API
    keys out of source control.
 
+### API and OAuth configuration
+
+All local API credentials are stored in the root `.env` file. Copy
+`.env.example` to `.env` first; never place secret values in `src/` or commit
+`.env`.
+
+| Variable | Stored/used by | Visibility and purpose |
+| --- | --- | --- |
+| `GOOGLE_AI_API_KEY` | Laravel server, `app/Services/GeminiScannerService.php` | Server-only Gemini key used for document and career scanning. |
+| `MAIL_HOST`, `MAIL_PORT` | Laravel server, `config/mail.php` | SMTP host and port used to send login and social-login OTP emails. |
+| `MAIL_USERNAME`, `MAIL_PASSWORD` | Laravel server, `config/mail.php` | SMTP credentials for OTP email delivery. |
+| `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME` | Laravel server, `config/mail.php` | Sender address and name for OTP email. |
+| `VITE_GOOGLE_CLIENT_ID` | Vite client, `src/pages/Auth.jsx` | Public Google OAuth client ID. It is embedded in browser assets; it is not a secret. |
+| `VITE_FACEBOOK_APP_ID` | Vite client, `src/pages/Auth.jsx` | Public Facebook OAuth app ID. It is embedded in browser assets; it is not a secret. |
+| `VITE_AUTH_REDIRECT_URI` | Vite client, `src/pages/Auth.jsx` | OAuth callback URL, for example `http://127.0.0.1:8000/auth`. |
+| `GOOGLE_CLIENT_SECRET` | Laravel configuration, `config/services.php` | Server-side Google OAuth secret. Do not expose it through a `VITE_` variable. |
+| `GOOGLE_REDIRECT_URI` | Laravel configuration, `config/services.php` | Server-side Google OAuth redirect configuration. |
+
+The browser only receives variables prefixed with `VITE_` during the Vite
+build. Server-only credentials are read by Laravel through `config/services.php`
+and remain in PHP. For Google and Facebook sign-in, configure the exact
+callback URL in the provider console and configure the `MAIL_*` SMTP settings;
+social sign-in cannot complete OTP verification without working email settings.
+
 3. Create the database schema:
 
    ```bash
@@ -176,8 +200,10 @@ Configure these environment variables in Railway for production, or in `.env` fo
 | `APP_KEY` | Laravel application encryption key. |
 | `AUTH_FIELD_SECRET` | Optional application authentication secret. |
 | `GOOGLE_AI_API_KEY` | Server-only Google AI key for scanning. |
-| `RESEND_API_KEY` | Server-only Resend key for OTP email. |
-| `AUTH_EMAIL_FROM` | Verified sender used for authentication email. |
+| `MAIL_MAILER` | Set to `smtp` for real OTP email delivery. |
+| `MAIL_HOST`, `MAIL_PORT` | SMTP server connection values. |
+| `MAIL_USERNAME`, `MAIL_PASSWORD` | SMTP authentication credentials. |
+| `MAIL_FROM_ADDRESS` | Verified sender address for authentication email. |
 | `AUTH_OTP_REQUIRED` | Set to `true` to require OTP verification. |
 | `VITE_GOOGLE_CLIENT_ID` | Public Google OAuth client ID. |
 | `VITE_FACEBOOK_APP_ID` | Public Facebook OAuth app ID. |
