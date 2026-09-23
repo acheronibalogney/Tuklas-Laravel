@@ -1,5 +1,6 @@
 const MAX_INLINE_BYTES = 18 * 1024 * 1024;
 export const MAX_SCAN_FILES = 8;
+export const MAX_SCAN_TOTAL_BYTES = 18 * 1024 * 1024;
 
 function getSafeMimeType(fileName, originalType) {
   if (originalType && originalType !== 'application/octet-stream') return originalType;
@@ -396,7 +397,7 @@ function formatAnalysisReport(analysis) {
   ].join('\n');
 }
 
-async function scanSingleFile({ file, goal, mode = 'document-scan', onProgress }) {
+async function prepareScanFile(file, onProgress) {
   if (file.size > MAX_INLINE_BYTES) {
     throw new Error(`"${file.name}" is larger than 18 MB.`);
   }
@@ -417,33 +418,8 @@ async function scanSingleFile({ file, goal, mode = 'document-scan', onProgress }
     payloadFiles.push({ kind: 'inline', name: file.name, type: mimeType, data: await toBase64(file) });
   }
 
-  onProgress?.(35, 'scanning');
-
-  try {
-    const response = await fetch('/api/scan', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ goal, files: payloadFiles, mode }),
-    });
-    const payload = await response.json();
-    if (response.ok && payload?.analysis && (payload.analysis.skillsDetected?.length || payload.analysis.summary)) {
-      return {
-        result: payload.result || formatAnalysisReport(payload.analysis),
-        analysis: payload.analysis,
-        model: payload.model || 'TuklasAI',
-      };
-    }
-  } catch (err) {
-    console.warn('Backend scan endpoint warning:', err.message);
-  }
-
-  // Fallback when API is unavailable
-  const fallbackAnalysis = generateFallbackAnalysis(file, textContent, goal);
-  return {
-    result: formatAnalysisReport(fallbackAnalysis),
-    analysis: fallbackAnalysis,
-    model: 'Tuklas AI Engine',
-  };
+  onProgress?.(100, 'ready');
+  return payloadFiles[0];
 }
 
 // Case-insensitive dedup for strings (strips leading bullet/dash chars)
@@ -472,51 +448,25 @@ const uniqueObjectItems = (items, key) => {
 
 export async function scanFiles({ files, goal, onFileProgress, mode = 'document-scan' }) {
   if (files.length > MAX_SCAN_FILES) throw new Error(`Choose up to ${MAX_SCAN_FILES} files per scan.`);
+  if (files.reduce((total, file) => total + file.size, 0) > MAX_SCAN_TOTAL_BYTES) throw new Error('Selected files are too large for one scan (18 MB maximum).');
   if (!files.length && !goal?.trim()) throw new Error('Type a question or choose at least one file to scan.');
 
-  if (!files.length) {
-    const response = await fetch('/api/scan', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ goal, files: [], mode }),
-    });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || 'Unable to generate an AI answer.');
-    return payload;
-  }
-
-  const scans = [];
+  const payloadFiles = [];
   for (const [index, file] of files.entries()) {
     onFileProgress?.({ file, index, total: files.length, percent: 10, status: 'reading file' });
-    const scan = await scanSingleFile({
-      file,
-      goal,
-      mode,
-      onProgress: (percent, status) => onFileProgress?.({ file, index, total: files.length, percent, status }),
-    });
-    scans.push(scan);
-    onFileProgress?.({ file, index, total: files.length, percent: 100, status: 'complete' });
+    payloadFiles.push(await prepareScanFile(file, (percent, status) => onFileProgress?.({ file, index, total: files.length, percent, status })));
   }
 
-  const analyses = scans.map(s => s.analysis);
-  const combinedAnalysis = {
-    summary:              scans.map((s, i) => `${files[i].name}: ${s.analysis.summary || s.result}`).join('\n\n'),
-    skillsDetected:       uniqueItems(analyses.flatMap(a => a.skillsDetected || [])),
-    careerMatches:        uniqueObjectItems(analyses.flatMap(a => a.careerMatches || []), 'name'),
-    jobRecommendations:   uniqueObjectItems(analyses.flatMap(a => a.jobRecommendations || []), 'title'),
-    skillGaps:            uniqueItems(analyses.flatMap(a => a.skillGaps || [])),
-    tesdaRecommendations: uniqueItems(analyses.flatMap(a => a.tesdaRecommendations || [])),
-    learningRecommendations: uniqueObjectItems(analyses.flatMap(a => a.learningRecommendations || []), 'title'),
-    nextActions:          uniqueItems(analyses.flatMap(a => a.nextActions || [])),
-  };
-
-  return {
-    result: [
-      'Combined Document Analysis', '',
-      ...scans.flatMap((s, i) => [`Document: ${files[i].name}`, s.result, '']),
-    ].join('\n').trim(),
-    analysis: combinedAnalysis,
-    model: uniqueItems(scans.map(s => s.model)).join(', '),
-  };
+  if (files.length) onFileProgress?.({ file: files[files.length - 1], index: files.length - 1, total: files.length, percent: 100, status: 'scanning' });
+  const response = await fetch('/api/scan', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ goal, files: payloadFiles, mode }),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || 'Unable to scan the selected files.');
+  if (!payload?.analysis) throw new Error('The AI scanner returned an empty result. Please try again.');
+  if (files.length) onFileProgress?.({ file: files[files.length - 1], index: files.length - 1, total: files.length, percent: 100, status: 'complete' });
+  return payload;
 }

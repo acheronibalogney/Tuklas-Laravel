@@ -253,7 +253,7 @@ export function UserProvider({ children }) {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'social', email: account.email, name: account.name, picture: account.picture, provider: account.provider }),
+        body: JSON.stringify({ action: 'social', providerToken: account.providerToken, provider: account.provider }),
       });
       const result = await response.json();
       if (!response.ok) return { success: false, error: result.error || 'Social login failed.' };

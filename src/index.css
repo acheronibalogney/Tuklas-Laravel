@@ -6817,3 +6817,159 @@ tbody tr:hover .row-menu-btn {
   border-color: var(--dashboard-teal, #70c8b5);
   background: rgba(112, 200, 181, 0.08);
 }
+
+@media (max-width: 720px) {
+  .app-shell .content-scroll:has(.scanner-page--embedded) {
+    padding: 14px 12px 84px;
+  }
+
+  .app-shell .scanner-shell--embedded {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .app-shell .scanner-hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    margin-bottom: 14px;
+    padding-bottom: 14px;
+  }
+
+  .app-shell .scanner-hero h1 {
+    max-width: 100%;
+    font-size: clamp(32px, 9vw, 44px) !important;
+    line-height: 1;
+    overflow-wrap: anywhere;
+  }
+
+  .scanner-page:not(.scanner-page--embedded) .scanner-hero h1 {
+    font-size: clamp(31px, 9vw, 42px);
+    line-height: 1;
+    overflow-wrap: anywhere;
+  }
+
+  .app-shell .scanner-hero p {
+    margin-bottom: 0;
+    font-size: 14px;
+  }
+
+  .app-shell .scanner-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .app-shell .scanner-panel,
+  .app-shell .scanner-results,
+  .scanner-page:not(.scanner-page--embedded) .scanner-panel,
+  .scanner-page:not(.scanner-page--embedded) .scanner-results {
+    min-width: 0;
+    padding: 14px !important;
+  }
+
+  .app-shell .scanner-dropzone {
+    min-height: 140px;
+    padding: 16px 12px;
+  }
+
+  .app-shell .scanner-dropzone strong {
+    font-size: 14px;
+  }
+
+  .app-shell .scanner-file-row {
+    grid-template-columns: 42px minmax(0, 1fr);
+    gap: 10px;
+    padding: 8px;
+  }
+
+  .app-shell .scanner-file-row img,
+  .app-shell .scanner-file-icon {
+    width: 42px;
+    height: 42px;
+  }
+
+  .app-shell .scanner-results-stack {
+    gap: 14px !important;
+  }
+
+  .scanner-page:not(.scanner-page--embedded) .scanner-results-stack {
+    gap: 14px !important;
+  }
+
+  .app-shell .scanner-summary,
+  .scanner-page:not(.scanner-page--embedded) .scanner-summary {
+    padding: 14px !important;
+    overflow-wrap: anywhere;
+  }
+
+  .app-shell .scanner-result-card-header,
+  .scanner-page:not(.scanner-page--embedded) .scanner-result-card-header {
+    min-width: 0;
+    padding: 11px 12px !important;
+  }
+
+  .app-shell .scanner-result-card-body,
+  .scanner-page:not(.scanner-page--embedded) .scanner-result-card-body {
+    min-width: 0;
+    padding: 12px !important;
+  }
+
+  .app-shell .scanner-career-grid,
+  .app-shell .scanner-learning-grid,
+  .scanner-page:not(.scanner-page--embedded) .scanner-career-grid,
+  .scanner-page:not(.scanner-page--embedded) .scanner-learning-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  .app-shell .scanner-skill-gap-item,
+  .app-shell .scanner-tesda-item,
+  .scanner-page:not(.scanner-page--embedded) .scanner-skill-gap-item,
+  .scanner-page:not(.scanner-page--embedded) .scanner-tesda-item {
+    align-items: flex-start !important;
+    flex-wrap: wrap;
+    padding: 9px 10px !important;
+    overflow-wrap: anywhere;
+  }
+
+  .app-shell .scanner-skill-gap-item > div,
+  .app-shell .scanner-tesda-item > div,
+  .scanner-page:not(.scanner-page--embedded) .scanner-skill-gap-item > div,
+  .scanner-page:not(.scanner-page--embedded) .scanner-tesda-item > div {
+    min-width: 0;
+    flex: 1 1 150px;
+  }
+
+  .app-shell .scanner-skill-gap-item > a,
+  .app-shell .scanner-tesda-item > a,
+  .scanner-page:not(.scanner-page--embedded) .scanner-skill-gap-item > a,
+  .scanner-page:not(.scanner-page--embedded) .scanner-tesda-item > a {
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  .app-shell .scanner-progress-head {
+    font-size: 9px;
+  }
+
+  .scanner-learning-grid > div,
+  .scanner-learning-grid > div > div:first-child,
+  .scanner-learning-grid > div > div:first-child > span:first-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 380px) {
+  .app-shell .scanner-hero h1 {
+    font-size: 31px !important;
+  }
+
+  .app-shell .scanner-panel,
+  .app-shell .scanner-results {
+    padding: 11px !important;
+  }
+
+  .app-shell .scanner-result-card-body {
+    padding: 10px !important;
+  }
+}

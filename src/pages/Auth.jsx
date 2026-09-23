@@ -378,9 +378,7 @@ export default function Auth() {
         const payload = JSON.parse(atob(encodedPayload.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - encodedPayload.length % 4) % 4)));
         if (!payload.email || payload.email_verified === false) throw new Error('Google did not return a verified email address');
         const account = {
-          email: payload.email,
-          name: payload.name || payload.email.split('@')[0],
-          picture: payload.picture || '',
+          providerToken: idToken,
           provider: 'Google',
         };
         const result = await loginWithSocial(account);
@@ -408,9 +406,7 @@ export default function Auth() {
           throw new Error(data.error?.message || 'Facebook login failed');
         }
         const account = {
-          email: data.email,
-          name: data.name || data.email.split('@')[0],
-          picture: data.picture?.data?.url || '',
+          providerToken: accessToken,
           provider: 'Facebook',
         };
         const result = await loginWithSocial(account);

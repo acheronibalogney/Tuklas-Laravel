@@ -3,14 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\RespondsWithTuklasData;
+use App\Jobs\SendOtpEmail;
 use App\Models\User;
 use App\Models\LoginLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 
 class AuthController extends Controller
@@ -66,19 +67,22 @@ class AuthController extends Controller
         }
 
         if ($action === 'social') {
-            $request->validate(['email' => 'required|email:rfc,dns', 'name' => 'nullable|string|max:255', 'provider' => ['required', Rule::in(['Google', 'Facebook', 'google', 'facebook'])]]);
+            $request->validate(['providerToken' => 'required|string', 'provider' => ['required', Rule::in(['Google', 'Facebook', 'google', 'facebook'])]]);
             $provider = strtolower($request->string('provider', 'social')->toString());
-            $email = strtolower($request->string('email')->toString());
+            $identity = $this->socialIdentity($provider, $request->string('providerToken')->toString());
+            if (!$identity || empty($identity['email'])) return response()->json(['error' => 'Unable to verify your social account. Please try again.'], 401);
+            $email = strtolower($identity['email']);
             $user = User::where('email', $email)->first();
+            $newSocialAccount = !$user;
             if (!$user) {
-                $user = User::create(['name' => $request->string('name', $request->string('email'))->toString(), 'email' => $email, 'password' => Str::random(40), 'profile' => ['picture' => $request->string('picture')->toString(), 'authProvider' => $provider, 'needsPasswordSetup' => true], 'notifications' => [], 'settings' => []]);
+                $user = User::create(['name' => $identity['name'] ?: strtok($email, '@'), 'email' => $email, 'email_verified_at' => now(), 'password' => Str::random(64), 'profile' => ['picture' => $identity['picture'] ?? '', 'authProvider' => $provider, 'needsPasswordSetup' => true], 'notifications' => [], 'settings' => []]);
             }
             $profile = $user->profile ?: [];
             $profile['authProvider'] = $provider;
-            $profile['needsPasswordSetup'] = true;
-            if ($request->filled('picture')) $profile['picture'] = $request->string('picture')->toString();
+            if ($newSocialAccount) $profile['needsPasswordSetup'] = true;
+            if (!empty($identity['picture'])) $profile['picture'] = $identity['picture'];
             $user->forceFill([
-                'name' => $request->string('name')->trim()->toString() ?: $user->name,
+                'name' => $identity['name'] ?: $user->name,
                 'profile' => $profile,
             ])->save();
             $challenge = $this->createOtpChallenge($user, $provider);
@@ -128,11 +132,26 @@ class AuthController extends Controller
 
     private function sendOtp(string $email, string $code): void
     {
-        $from = trim((string) config('mail.from.address'));
-        if (!$from) throw new \RuntimeException('OTP is enabled, but MAIL_FROM_ADDRESS is missing.');
-        Mail::raw("Your Tuklas verification code is {$code}.\n\nThis code expires in 5 minutes.", function ($message) use ($email): void {
-            $message->to($email)->subject('Your Tuklas verification code');
-        });
+        SendOtpEmail::dispatchSync($email, $code);
+    }
+
+    private function socialIdentity(string $provider, string $token): ?array
+    {
+        try {
+            if ($provider === 'google') {
+                $response = Http::timeout(10)->get('https://oauth2.googleapis.com/tokeninfo', ['id_token' => $token]);
+                $identity = $response->json();
+                if (!$response->successful() || ($identity['aud'] ?? null) !== config('services.google.client_id') || ($identity['email_verified'] ?? null) !== 'true') return null;
+                return ['email' => $identity['email'] ?? null, 'name' => $identity['name'] ?? '', 'picture' => $identity['picture'] ?? ''];
+            }
+
+            $response = Http::timeout(10)->get('https://graph.facebook.com/me', ['fields' => 'id,name,email,picture', 'access_token' => $token]);
+            $identity = $response->json();
+            if (!$response->successful() || empty($identity['id']) || empty($identity['email'])) return null;
+            return ['email' => $identity['email'], 'name' => $identity['name'] ?? '', 'picture' => $identity['picture']['data']['url'] ?? ''];
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     private function maskEmail(string $email): string { [$name, $domain] = array_pad(explode('@', $email, 2), 2, ''); return substr($name, 0, 2).str_repeat('*', max(1, strlen($name) - 2)).'@'.$domain; }

@@ -23,7 +23,11 @@ class ScanController extends Controller
     public function analyze(Request $request, GeminiScannerService $scanner) {
         if (!$request->user()) return response()->json(['error' => 'Authentication required.'], 401);
         $data = $request->validate(['goal' => 'nullable|string|max:5000', 'mode' => 'nullable|string|max:80', 'files' => 'array|max:8', 'files.*.name' => 'nullable|string|max:255', 'files.*.type' => 'nullable|string|max:120', 'files.*.kind' => 'nullable|string|max:30', 'files.*.text' => 'nullable|string|max:60000', 'files.*.data' => 'nullable|string']);
-        $files = $data['files'] ?? []; $bytes = collect($files)->sum(fn ($file) => (int) ceil(strlen((string) ($file['data'] ?? $file['text'] ?? '')) * .75));
+        $files = $data['files'] ?? [];
+        if (!$files && !trim((string) ($data['goal'] ?? ''))) return response()->json(['error' => 'Type a question or provide at least one file.'], 400);
+        $bytes = collect($files)->sum(fn ($file) => !empty($file['data'])
+            ? (int) ceil(strlen((string) $file['data']) * .75)
+            : strlen((string) ($file['text'] ?? '')));
         if ($bytes > 18 * 1024 * 1024) return response()->json(['error' => 'Selected files are too large for one scan.'], 413);
         try { return response()->json($scanner->scan($data['goal'] ?? '', $files, $data['mode'] ?? 'document-scan')); }
         catch (\Throwable $error) { return response()->json(['error' => $error->getMessage() ?: 'Unable to scan these files.'], $error->getCode() >= 400 && $error->getCode() < 600 ? $error->getCode() : 500); }

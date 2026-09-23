@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '../UserContext';
-import { MAX_SCAN_FILES, scanFiles } from '../scan';
+import { MAX_SCAN_FILES, MAX_SCAN_TOTAL_BYTES, scanFiles } from '../scan';
 
 const UploadIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -150,7 +150,7 @@ function ScanResults({ analysis, syncedAt, lastScannedFull, scanCount }) {
   } = analysis;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div className="scanner-results-stack" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
       {/* ── Last scanned timestamp ────────────────────────────────────────── */}
       {lastScannedFull && (
@@ -175,7 +175,7 @@ function ScanResults({ analysis, syncedAt, lastScannedFull, scanCount }) {
 
       {/* ── Summary ───────────────────────────────────────────────────────── */}
       {summary && (
-        <div style={{
+        <div className="scanner-summary" style={{
           background: 'var(--bg-surface)', border: '1px solid var(--border)',
           borderRadius: 'var(--radius-lg)', padding: '16px 20px',
         }}>
@@ -217,7 +217,7 @@ function ScanResults({ analysis, syncedAt, lastScannedFull, scanCount }) {
       {/* ── Career path matches ─── MULTIPLE CARDS ─────────────────────── */}
       {careerMatches.length > 0 && (
         <ResultCard title="Career Path Matches" count={careerMatches.length} icon={<TargetIcon />}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
+          <div className="scanner-career-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
             {careerMatches.map((career, i) => {
               const pct = parseInt(career.match, 10) || 0;
               const { bar, badge } = matchColour(career.match);
@@ -255,7 +255,7 @@ function ScanResults({ analysis, syncedAt, lastScannedFull, scanCount }) {
         <ResultCard title="Job Recommendations" count={jobRecommendations.length} icon={<BriefcaseIcon />}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {jobRecommendations.map((job, i) => (
-              <div key={i} style={{
+              <div key={i} className="scanner-skill-gap-item" style={{
                 background: 'var(--bg-card)', border: '1px solid var(--border)',
                 borderRadius: 'var(--radius-md)', padding: '14px 16px',
               }}>
@@ -288,7 +288,7 @@ function ScanResults({ analysis, syncedAt, lastScannedFull, scanCount }) {
         <ResultCard title="Skill Gaps to Address" count={skillGaps.length}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {skillGaps.map((gap, i) => (
-              <div key={i} style={{
+              <div key={i} className="scanner-tesda-item" style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 padding: '10px 14px',
                 background: 'var(--bg-card)', border: '1px solid var(--border)',
@@ -338,7 +338,7 @@ function ScanResults({ analysis, syncedAt, lastScannedFull, scanCount }) {
       {/* ── Learning Recommendations ──────────────────────────────────────── */}
       {learningRecommendations.length > 0 && (
         <ResultCard title="Learning Plan" count={learningRecommendations.length} icon={<StarIcon />}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+          <div className="scanner-learning-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
             {learningRecommendations.map((item, i) => (
               <div key={i} style={{
                 background: 'var(--bg-card)', border: '1px solid var(--border)',
@@ -396,7 +396,7 @@ function ResultCard({ title, count, icon, children }) {
       background: 'var(--bg-surface)', border: '1px solid var(--border)',
       borderRadius: 'var(--radius-lg)', overflow: 'hidden',
     }}>
-      <div style={{
+      <div className="scanner-result-card-header" style={{
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '12px 20px',
         borderBottom: '1px solid var(--border)',
@@ -408,7 +408,7 @@ function ResultCard({ title, count, icon, children }) {
           <span className="badge badge-muted" style={{ marginLeft: 'auto' }}>{count}</span>
         )}
       </div>
-      <div style={{ padding: '16px 20px' }}>{children}</div>
+      <div className="scanner-result-card-body" style={{ padding: '16px 20px' }}>{children}</div>
     </div>
   );
 }
@@ -464,6 +464,11 @@ export default function AiScanner({ embedded = false, initialGoal = '', autoRun 
     const combinedFiles = [...files, ...newFiles];
     if (combinedFiles.length > MAX_SCAN_FILES) {
       setError(`You can upload up to ${MAX_SCAN_FILES} files per scan. ${files.length} already selected.`);
+      event.target.value = '';
+      return;
+    }
+    if (combinedFiles.reduce((total, file) => total + file.size, 0) > MAX_SCAN_TOTAL_BYTES) {
+      setError('Selected files exceed the 18 MB total limit. Remove a file and try again.');
       event.target.value = '';
       return;
     }
