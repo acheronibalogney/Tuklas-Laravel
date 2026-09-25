@@ -5,6 +5,8 @@ first-time jobseekers, and career shifters. It helps users explore career
 paths, connect skills with TESDA-aligned opportunities, manage documents, and
 scan credentials with AI assistance.
 
+PS: DONT CHANGE THE DESIGN YET RECOMMEND IF POSSIBLE
+
 ## Project layout
 
 - `app/`, `routes/`, `database/`: Laravel API, authentication, models, and migrations
