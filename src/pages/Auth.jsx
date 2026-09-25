@@ -357,7 +357,8 @@ export default function Auth() {
         setLoginError('Facebook login is not configured. Please set VITE_FACEBOOK_APP_ID in your environment.');
         return;
       }
-      const facebookUrl = `https://www.facebook.com/v17.0/dialog/oauth?client_id=${encodeURIComponent(appId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent('email,public_profile')}&auth_type=rerequest&state=facebook`;
+      const graphApiVersion = String(import.meta.env.VITE_FACEBOOK_GRAPH_API_VERSION || 'v26.0').trim();
+      const facebookUrl = `https://www.facebook.com/${encodeURIComponent(graphApiVersion)}/dialog/oauth?client_id=${encodeURIComponent(appId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent('email,public_profile')}&auth_type=rerequest&state=facebook`;
       window.location.href = facebookUrl;
       return;
     }
@@ -378,6 +379,9 @@ export default function Auth() {
         const payload = JSON.parse(atob(encodedPayload.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - encodedPayload.length % 4) % 4)));
         if (!payload.email || payload.email_verified === false) throw new Error('Google did not return a verified email address');
         const account = {
+          email: payload.email,
+          name: payload.name || payload.email.split('@')[0],
+          picture: payload.picture || '',
           providerToken: idToken,
           provider: 'Google',
         };
@@ -406,6 +410,9 @@ export default function Auth() {
           throw new Error(data.error?.message || 'Facebook login failed');
         }
         const account = {
+          email: data.email,
+          name: data.name || data.email.split('@')[0],
+          picture: data.picture?.data?.url || '',
           providerToken: accessToken,
           provider: 'Facebook',
         };

@@ -626,8 +626,9 @@ export default function Dashboard() {
       setCareerPathResult(result.analysis || null);
       setCareerPathMessages(messages => [...messages, { role: 'assistant', content: result.analysis?.summary || 'I could not generate a detailed answer for that question.', analysis: result.analysis }]);
     } catch (error) {
-      setCareerPathError(error instanceof Error ? error.message : 'Unable to get an AI career recommendation.');
-      setCareerPathMessages(messages => [...messages, { role: 'assistant', content: 'I was unable to answer that right now. Please try again.' }]);
+      const message = error instanceof Error ? error.message : 'Unable to get an AI career recommendation.';
+      setCareerPathError(message);
+      setCareerPathMessages(messages => [...messages, { role: 'assistant', content: message }]);
     } finally {
       setCareerPathLoading(false);
     }

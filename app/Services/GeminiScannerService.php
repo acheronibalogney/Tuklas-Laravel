@@ -8,8 +8,8 @@ use RuntimeException;
 class GeminiScannerService
 {
     private const DEFAULT_MODELS = [
-        'models/gemini-3.7-flash', 'models/gemini-3.1-pro-preview', 'models/gemini-3.6-flash',
-        'models/gemini-3.5-flash-lite', 'models/gemini-3.1-flash-lite', 'models/gemini-3.5-flash',
+        'models/gemini-3-flash-preview', 'models/gemini-3.1-flash-lite', 'models/gemini-flash-latest',
+        'models/gemini-flash-lite-latest', 'models/gemini-3.1-pro-preview',
     ];
 
     public function scan(string $goal, array $files, string $mode = 'document-scan'): array
@@ -42,8 +42,9 @@ class GeminiScannerService
                 $supported = collect(data_get($available->json(), 'models', []))
                     ->filter(fn ($item) => in_array('generateContent', $item['supportedGenerationMethods'] ?? [], true))
                     ->pluck('name')->all();
+                $preferred = collect(self::DEFAULT_MODELS)->filter(fn ($model) => in_array($model, $supported, true));
                 $matching = $models->filter(fn ($model) => in_array($model, $supported, true));
-                if ($matching->isNotEmpty()) $models = $matching->values();
+                $models = $matching->merge($preferred)->unique()->values();
             }
         } catch (\Throwable) {
             // Fall back to the configured/default model list if model discovery is unavailable.
@@ -125,13 +126,20 @@ PROMPT;
     private function normalize(array $analysis, string $text): array
     {
         $array = fn ($value) => is_array($value) ? array_values(array_filter($value)) : ($value ? [(string) $value] : []);
+        $jobRecommendations = array_slice(is_array($analysis['jobRecommendations'] ?? null) ? $analysis['jobRecommendations'] : [], 0, 10);
+        $jobRecommendations = array_values(array_map(function ($job) use ($array) {
+            if (!is_array($job)) return null;
+            $job['workplaces'] = $array($job['workplaces'] ?? []);
+            return $job;
+        }, $jobRecommendations));
+        $jobRecommendations = array_values(array_filter($jobRecommendations));
         preg_match_all('/https?:\/\/[^\s"\'<>]+/', $text, $urlMatches);
         $sourceUrls = array_slice(array_unique(array_map(fn ($url) => rtrim($url, '),.;'), $urlMatches[0] ?? [])), 0, 6);
         return [
             'summary' => $analysis['summary'] ?? $text ?: 'Document analysis completed successfully.',
             'sourceUrls' => $sourceUrls, 'skillsDetected' => array_slice($array($analysis['skillsDetected'] ?? []), 0, 20),
             'careerMatches' => array_slice(array_map(fn ($item) => ['name' => $item['name'] ?? 'Career Match', 'match' => $item['match'] ?? '70%'], is_array($analysis['careerMatches'] ?? null) ? $analysis['careerMatches'] : []), 0, 10),
-            'jobRecommendations' => array_slice(is_array($analysis['jobRecommendations'] ?? null) ? $analysis['jobRecommendations'] : [], 0, 10),
+            'jobRecommendations' => $jobRecommendations,
             'skillGaps' => array_slice($array($analysis['skillGaps'] ?? []), 0, 20), 'tesdaRecommendations' => array_slice($array($analysis['tesdaRecommendations'] ?? []), 0, 15),
             'learningRecommendations' => array_slice(is_array($analysis['learningRecommendations'] ?? null) ? $analysis['learningRecommendations'] : [], 0, 15),
             'nextActions' => array_slice($array($analysis['nextActions'] ?? []), 0, 10),

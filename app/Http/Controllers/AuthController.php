@@ -85,6 +85,7 @@ class AuthController extends Controller
                 'name' => $identity['name'] ?: $user->name,
                 'profile' => $profile,
             ])->save();
+            if (!$this->otpRequired($email)) return $this->loginResponse($request, $user, true, 200, $provider);
             $challenge = $this->createOtpChallenge($user, $provider);
             try { $this->sendOtp($email, $challenge['code']); } catch (\Throwable $error) { \Illuminate\Support\Facades\DB::table('otp_challenges')->where('token_hash', hash('sha256', $challenge['token']))->delete(); return response()->json(['error' => $error->getMessage() ?: 'Unable to send the verification code.'], 503); }
             return response()->json(['requiresOtp' => true, 'challengeToken' => $challenge['token'], 'maskedEmail' => $this->maskEmail($email), 'provider' => $provider]);
@@ -141,11 +142,12 @@ class AuthController extends Controller
             if ($provider === 'google') {
                 $response = Http::timeout(10)->get('https://oauth2.googleapis.com/tokeninfo', ['id_token' => $token]);
                 $identity = $response->json();
-                if (!$response->successful() || ($identity['aud'] ?? null) !== config('services.google.client_id') || ($identity['email_verified'] ?? null) !== 'true') return null;
+                if (!$response->successful() || ($identity['aud'] ?? null) !== config('services.google.client_id') || filter_var($identity['email_verified'] ?? false, FILTER_VALIDATE_BOOLEAN) !== true) return null;
                 return ['email' => $identity['email'] ?? null, 'name' => $identity['name'] ?? '', 'picture' => $identity['picture'] ?? ''];
             }
 
-            $response = Http::timeout(10)->get('https://graph.facebook.com/me', ['fields' => 'id,name,email,picture', 'access_token' => $token]);
+            $version = config('services.facebook.graph_api_version', 'v26.0');
+            $response = Http::timeout(10)->get("https://graph.facebook.com/{$version}/me", ['fields' => 'id,name,email,picture', 'access_token' => $token]);
             $identity = $response->json();
             if (!$response->successful() || empty($identity['id']) || empty($identity['email'])) return null;
             return ['email' => $identity['email'], 'name' => $identity['name'] ?? '', 'picture' => $identity['picture']['data']['url'] ?? ''];

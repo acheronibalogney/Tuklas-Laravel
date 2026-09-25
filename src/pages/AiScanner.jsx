@@ -93,6 +93,11 @@ function matchColour(matchStr) {
   return { bar: 'var(--text-muted)', badge: 'badge-muted' };
 }
 
+function workplaceList(value) {
+  if (Array.isArray(value)) return value.filter(item => typeof item === 'string' || typeof item === 'number').map(String);
+  return typeof value === 'string' && value.trim() ? [value.trim()] : [];
+}
+
 // ── Merge two analysis objects — accumulate without duplication ──────────────
 // Normalise a string for dedup comparison: lowercase, trim, strip leading dashes/bullets
 const normKey = (s) => String(s || '').toLowerCase().replace(/^[-–•·\s]+/, '').replace(/\s+/g, ' ').trim();
@@ -142,12 +147,14 @@ function ScanResults({ analysis, syncedAt, lastScannedFull, scanCount }) {
     summary,
     skillsDetected = [],
     careerMatches = [],
-    jobRecommendations = [],
     skillGaps = [],
     tesdaRecommendations = [],
     learningRecommendations = [],
     nextActions = [],
   } = analysis;
+  const jobRecommendations = Array.isArray(analysis.jobRecommendations)
+    ? analysis.jobRecommendations.filter(job => job && typeof job === 'object' && !Array.isArray(job))
+    : [];
 
   return (
     <div className="scanner-results-stack" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -254,13 +261,15 @@ function ScanResults({ analysis, syncedAt, lastScannedFull, scanCount }) {
       {jobRecommendations.length > 0 && (
         <ResultCard title="Job Recommendations" count={jobRecommendations.length} icon={<BriefcaseIcon />}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {jobRecommendations.map((job, i) => (
+            {jobRecommendations.map((job, i) => {
+              const workplaces = workplaceList(job?.workplaces);
+              return (
               <div key={i} className="scanner-skill-gap-item" style={{
                 background: 'var(--bg-card)', border: '1px solid var(--border)',
                 borderRadius: 'var(--radius-md)', padding: '14px 16px',
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4, gap: 8 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>{job.title}</div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>{job?.title || 'Job recommendation'}</div>
                   {job.searchTerms && (
                     <a
                       href={`https://www.google.com/search?q=${encodeURIComponent(job.searchTerms)}`}
@@ -270,15 +279,16 @@ function ScanResults({ analysis, syncedAt, lastScannedFull, scanCount }) {
                   )}
                 </div>
                 {job.reason && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6, lineHeight: 1.5 }}>{job.reason}</div>}
-                {job.workplaces?.length > 0 && (
+                {workplaces.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {job.workplaces.map((w, wi) => (
+                    {workplaces.map((w, wi) => (
                       <span key={wi} className="badge badge-muted">{w}</span>
                     ))}
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         </ResultCard>
       )}
@@ -532,7 +542,9 @@ export default function AiScanner({ embedded = false, initialGoal = '', autoRun 
             ...current,
             [fileId(file, index)]: { percent, status },
           }));
-          setScanProgress(Math.round(((index * 100) + percent) / total));
+          if (status === 'complete') setScanProgress(100);
+          else if (status === 'scanning') setScanProgress(90);
+          else setScanProgress(Math.min(85, Math.round(((index * 100) + percent) / total)));
         },
       });
 
@@ -560,7 +572,8 @@ export default function AiScanner({ embedded = false, initialGoal = '', autoRun 
       setScanProgress(100);
     } catch (scanError) {
       setError(scanError instanceof Error ? scanError.message : 'Unable to scan these files.');
-      setScanProgress(100);
+      setScanProgress(0);
+      setFileProgress({});
     } finally {
       window.setTimeout(() => setIsScanning(false), 450);
     }
@@ -650,7 +663,7 @@ export default function AiScanner({ embedded = false, initialGoal = '', autoRun 
             {(isScanning || scanProgress > 0) && (
               <div className="scanner-progress" aria-label="Scan progress">
                 <div className="scanner-progress-head">
-                  <span>{isScanning ? 'Scanning selected files one at a time' : 'Scan complete'}</span>
+                  <span>{isScanning ? (scanProgress >= 90 ? 'AI is analyzing your files' : 'Preparing selected files') : error ? 'Scan failed' : 'Scan complete'}</span>
                   <strong>{scanProgress}%</strong>
                 </div>
                 <div className="scanner-progress-track">
@@ -703,6 +716,7 @@ export default function AiScanner({ embedded = false, initialGoal = '', autoRun 
                             <div className="scanner-file-progress-head">
                               <span>
                                 {progress?.status === 'complete' ? 'Scanned'
+                                  : progress?.status === 'ready' ? 'Ready for AI analysis'
                                   : progress?.status === 'preparing' ? 'Preparing file'
                                   : progress?.status === 'scanning' ? 'AI scanning'
                                   : 'Waiting in queue'}

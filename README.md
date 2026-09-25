@@ -64,6 +64,134 @@ Linux shell on macOS/Linux.
    `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, and `DB_PASSWORD`
    values. The default local port is `5432`.
 
+### PostgreSQL setup for local development
+
+Start PostgreSQL before running Laravel migrations or opening the app. Laravel
+connects to the database configured in `.env`; the default local connection is
+`127.0.0.1:5432`.
+
+#### Windows
+
+1. Install PostgreSQL using the Windows installer from
+   [postgresql.org/download/windows](https://www.postgresql.org/download/windows/).
+   Include the command-line tools and remember the password you set for the
+   `postgres` administrator account.
+2. Make sure the PostgreSQL service is running. Open **Services** from the
+   Start menu and start the service named `postgresql-x64-*` if needed. You can
+   also use pgAdmin, which is installed with PostgreSQL.
+3. Open PowerShell or Command Prompt and connect with `psql`:
+
+   ```powershell
+   psql -U postgres -h 127.0.0.1 -p 5432
+   ```
+
+   If `psql` is not found, open **SQL Shell (psql)** from the Start menu or add
+   PostgreSQL's `bin` directory to `PATH`. Alternatively, open pgAdmin's Query
+   Tool while connected to the local server.
+
+#### macOS
+
+With [Homebrew](https://brew.sh/), install and start PostgreSQL:
+
+```bash
+brew install postgresql
+brew services start postgresql
+psql postgres
+```
+
+If you installed PostgreSQL with its macOS installer instead, start the
+PostgreSQL server from its menu-bar app or installer tools, then connect with
+`psql -U postgres -h 127.0.0.1 -p 5432`.
+
+#### Linux
+
+On **Ubuntu / Debian**, install PostgreSQL and its PHP driver, then start the
+service:
+
+```bash
+sudo apt update
+sudo apt install postgresql postgresql-contrib php-pgsql
+sudo systemctl enable --now postgresql
+sudo -u postgres psql
+```
+
+On **Fedora / RHEL**, install PostgreSQL and the PHP driver, initialize the
+database cluster once, then start the service:
+
+```bash
+sudo dnf install postgresql-server postgresql-contrib php-pgsql
+sudo postgresql-setup --initdb
+sudo systemctl enable --now postgresql
+sudo -u postgres psql
+```
+
+For other Linux distributions, install the PostgreSQL server and PHP's
+`pdo_pgsql` extension using that distribution's package manager, start its
+PostgreSQL service, and open a `psql` prompt as the PostgreSQL administrator.
+
+#### Create the Tuklas database
+
+At the PostgreSQL prompt, run the following SQL. Windows users should first
+connect with `psql -U postgres -h 127.0.0.1 -p 5432`; macOS Homebrew users can
+use `psql postgres`; Ubuntu/Debian and Fedora/RHEL users can use
+`sudo -u postgres psql`. Replace the example password with a local development
+password and do not commit it:
+
+```sql
+CREATE ROLE tuklas_app WITH LOGIN PASSWORD 'change-this-local-password';
+CREATE DATABASE tuklas OWNER tuklas_app;
+\q
+```
+
+If the role or database already exists, keep it and confirm it has the
+permissions and password configured below instead of creating it again.
+
+Set these values in the root `.env` file:
+
+```dotenv
+DB_CONNECTION=pgsql
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_DATABASE=tuklas
+DB_USERNAME=tuklas_app
+DB_PASSWORD=change-this-local-password
+```
+
+Use the same `.env` values above on Windows, macOS, and Linux. For local
+password authentication, use `127.0.0.1` as `DB_HOST`.
+
+Check that Laravel has the PHP PostgreSQL driver and can reach the database:
+
+```bash
+php -m
+php artisan config:clear
+php artisan db:show
+```
+
+`php -m` should include `pdo_pgsql`. If it does not, enable/install the
+PostgreSQL extension for the PHP version used by Laravel, then restart the
+terminal or PHP server. After the database connection succeeds, create the
+tables and local demo accounts:
+
+```bash
+php artisan migrate --seed
+php artisan migrate:status
+```
+
+The `/api/db-health` endpoint should return `{"ok":true}` when the configured
+database is reachable. If `pg_isready` reports “no response” or Laravel reports
+“Connection refused”, start the PostgreSQL service and confirm its port matches
+`DB_PORT`. If Laravel reports “could not find driver”, enable `pdo_pgsql`. If
+it reports “password authentication failed” or “database does not exist”,
+check the role, password, database name, and `.env` values. Run
+`php artisan config:clear` after changing `.env`.
+
+If you prefer not to install PostgreSQL directly, Docker is available on
+Windows, macOS, and Linux. Run `docker compose up --build` to start the app and
+PostgreSQL containers; migrations run automatically. The Compose app connects
+to the service named `postgres`. Do not use `DB_HOST=127.0.0.1` for the app
+container because that points back to the app container itself.
+
 ### API and OAuth configuration
 
 All local API credentials are stored in the root `.env` file. Copy
@@ -78,7 +206,9 @@ All local API credentials are stored in the root `.env` file. Copy
 | `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME` | Laravel server, `config/mail.php` | Sender address and name for OTP email. |
 | `VITE_GOOGLE_CLIENT_ID` | Vite client, `src/pages/Auth.jsx` | Public Google OAuth client ID. It is embedded in browser assets; it is not a secret. |
 | `VITE_FACEBOOK_APP_ID` | Vite client, `src/pages/Auth.jsx` | Public Facebook OAuth app ID. It is embedded in browser assets; it is not a secret. |
+| `VITE_FACEBOOK_GRAPH_API_VERSION` | Vite client, `src/pages/Auth.jsx` | Facebook Graph API version used by the login dialog; defaults to `v26.0`. |
 | `VITE_AUTH_REDIRECT_URI` | Vite client, `src/pages/Auth.jsx` | OAuth callback URL, for example `http://127.0.0.1:8000/auth`. |
+| `FACEBOOK_GRAPH_API_VERSION` | Laravel server, `config/services.php` | Facebook Graph API version used to verify access tokens; defaults to `v26.0`. |
 | `GOOGLE_CLIENT_SECRET` | Laravel configuration, `config/services.php` | Server-side Google OAuth secret. Do not expose it through a `VITE_` variable. |
 | `GOOGLE_REDIRECT_URI` | Laravel configuration, `config/services.php` | Server-side Google OAuth redirect configuration. |
 
@@ -253,7 +383,9 @@ Configure these environment variables in Railway for production, or in `.env` fo
 | `AUTH_OTP_REQUIRED` | Set to `true` to require OTP verification. |
 | `VITE_GOOGLE_CLIENT_ID` | Public Google OAuth client ID. |
 | `VITE_FACEBOOK_APP_ID` | Public Facebook OAuth app ID. |
+| `VITE_FACEBOOK_GRAPH_API_VERSION` | Facebook Graph API version used by the browser login dialog. |
 | `VITE_AUTH_REDIRECT_URI` | Production auth callback URL. |
+| `FACEBOOK_GRAPH_API_VERSION` | Facebook Graph API version used for server-side access token verification. |
 
 Do not commit `.env` or paste its contents into source control. Configure production secrets only in Railway environment variables.
 

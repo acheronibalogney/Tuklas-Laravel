@@ -457,7 +457,7 @@ export async function scanFiles({ files, goal, onFileProgress, mode = 'document-
     payloadFiles.push(await prepareScanFile(file, (percent, status) => onFileProgress?.({ file, index, total: files.length, percent, status })));
   }
 
-  if (files.length) onFileProgress?.({ file: files[files.length - 1], index: files.length - 1, total: files.length, percent: 100, status: 'scanning' });
+  files.forEach((file, index) => onFileProgress?.({ file, index, total: files.length, percent: 85, status: 'scanning' }));
   const response = await fetch('/api/scan', {
     method: 'POST',
     credentials: 'include',
@@ -467,6 +467,6 @@ export async function scanFiles({ files, goal, onFileProgress, mode = 'document-
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.error || 'Unable to scan the selected files.');
   if (!payload?.analysis) throw new Error('The AI scanner returned an empty result. Please try again.');
-  if (files.length) onFileProgress?.({ file: files[files.length - 1], index: files.length - 1, total: files.length, percent: 100, status: 'complete' });
+  files.forEach((file, index) => onFileProgress?.({ file, index, total: files.length, percent: 100, status: 'complete' }));
   return payload;
 }
